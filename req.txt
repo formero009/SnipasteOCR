@@ -1,0 +1,10 @@
+pip install pyyaml
+pip install PyQt5
+pip install opencv-python
+pip install fastdeploy-python
+pip install pywin32
+pip install pyperclip
+
+## 下面是打包需要的依赖
+pip install imageio
+pip install nuitka
