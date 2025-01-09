@@ -1,3 +1,9 @@
 snipaste:
-  path: C:/Users/Forme/Pictures/saving_cut
-  modelpath: E:\deep_learning\SnipasteRecognizer\models
+  modelpath: C:\Users\formero\Desktop\projects\SnipasteOCR\models
+  path: C:/Users/formero/Pictures/snipaste
+  preview_enabled: true
+translation:
+  from_lang: auto
+  secret_id: ÄãµÄsecret_id
+  secret_key: ÄãµÄkey
+  to_lang: zh
