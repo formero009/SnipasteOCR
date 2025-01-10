@@ -39,7 +39,33 @@
 
    ![Snipaste设置](images/1.png)
 
-3. **使用方法**
+3. **安装与运行**
+
+   方式一：使用 UV（推荐）
+   ```bash
+   # 安装依赖
+   uv sync
+   
+   # 运行程序
+   uv main.py
+   ```
+
+   方式二：使用 pip
+   ```bash
+   # 安装依赖
+   pip install -r requirements.txt
+   
+   # 运行程序
+   python main.py
+   ```
+
+   方式三：一键安装
+   - 运行 `install.bat` 进行一键安装打包
+   
+   方式四：直接使用
+   - 从 [Releases](https://github.com/yourusername/SnipasteOCR/releases) 页面下载打包好的程序直接使用
+
+4. **使用方法**
    - 使用 Snipaste 截图
    - 按下 `Ctrl+Shift+S` 保存截图
    - 识别结果会自动复制到剪贴板
