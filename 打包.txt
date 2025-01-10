@@ -1,5 +1,0 @@
-## debug用这个打包
-nuitka --mingw64 --standalone --show-memory --show-progress --enable-plugin=pyqt5 --windows-icon-from-ico=assets/icon.png --nofollow-import-to=fastdeploy,numpy --output-dir=temp App.py
-
-## 正式用这个，区别是没有命令窗
-nuitka --mingw64 --standalone --show-memory --show-progress --enable-plugin=pyqt5 --windows-icon-from-ico=assets/icon.png --output-dir=temp --windows-disable-console --nofollow-import-to=fastdeploy,numpy App.py

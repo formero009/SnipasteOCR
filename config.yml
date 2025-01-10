@@ -1,9 +1,9 @@
 snipaste:
-  modelpath: C:\Users\formero\Desktop\projects\SnipasteOCR\models
+  modelpath: C:/Users/formero/Desktop/projects/SnipasteOCR/models
   path: C:/Users/formero/Pictures/snipaste
   preview_enabled: true
 translation:
   from_lang: auto
-  secret_id: ÄãµÄsecret_id
-  secret_key: ÄãµÄkey
+  secret_id: secret_id
+  secret_key: secret_key
   to_lang: zh

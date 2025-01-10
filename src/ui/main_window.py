@@ -9,6 +9,7 @@ import yaml
 from src.core.ocr_thread import OCRThread
 from src.ui.preview_window import PreviewWindow
 from src.utils.logging_config import setup_logging
+from ..core.resource_path import get_resource_path
 
 # Initialize logger for this module
 logger = logging.getLogger(__name__)
@@ -48,7 +49,9 @@ class MainWindow(QMainWindow):
         self.setGeometry(0, 0, 450, 300)
         self.setFixedSize(self.size())
         self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
-        self.setWindowIcon(QIcon('assets/icon.png'))
+        # 设置窗口图标
+        icon_path = get_resource_path('assets/icon.png')
+        self.setWindowIcon(QIcon(icon_path))
         self.setWindowTitle('SnipasteOCR')
         
         # 初始化到屏幕中间
@@ -79,7 +82,7 @@ class MainWindow(QMainWindow):
         
         # 添加程序标题（不可点击）
         titleAction = QAction("SnipasteOCR", self)
-        titleAction.setIcon(QIcon("assets/icon.png"))
+        titleAction.setIcon(QIcon(get_resource_path('assets/icon.png')))
         titleAction.setEnabled(False)
         self.trayIconMenu.addAction(titleAction)
         
@@ -87,13 +90,13 @@ class MainWindow(QMainWindow):
         
         # 显示/隐藏主窗口
         self.toggleWindowAction = QAction("显示主窗口", self)
-        self.toggleWindowAction.setIcon(QIcon("assets/icon.png"))
+        self.toggleWindowAction.setIcon(QIcon(get_resource_path('assets/icon.png')))
         self.toggleWindowAction.triggered.connect(self.toggleWindow)
         self.trayIconMenu.addAction(self.toggleWindowAction)
         
         # 重启选项
         restartAction = QAction("重启程序", self)
-        restartAction.setIcon(QIcon("assets/icon.png"))
+        restartAction.setIcon(QIcon(get_resource_path('assets/icon.png')))
         restartAction.triggered.connect(self.restart)
         self.trayIconMenu.addAction(restartAction)
         
@@ -101,7 +104,7 @@ class MainWindow(QMainWindow):
         
         # 添加帮助菜单
         helpMenu = QMenu("帮助", self)
-        helpMenu.setIcon(QIcon("assets/icon.png"))
+        helpMenu.setIcon(QIcon(get_resource_path('assets/icon.png')))
         
         aboutAction = QAction("关于", self)
         aboutAction.triggered.connect(self.showAbout)
@@ -117,13 +120,13 @@ class MainWindow(QMainWindow):
         
         # 退出选项
         self.quitAction = QAction("退出", self)
-        self.quitAction.setIcon(QIcon("assets/icon.png"))
+        self.quitAction.setIcon(QIcon(get_resource_path('assets/icon.png')))
         self.quitAction.triggered.connect(self.quit)
         self.trayIconMenu.addAction(self.quitAction)
 
         self.trayIcon = QSystemTrayIcon(self)
         self.trayIcon.setContextMenu(self.trayIconMenu)
-        self.trayIcon.setIcon(QIcon("assets/icon.png"))
+        self.trayIcon.setIcon(QIcon(get_resource_path('assets/icon.png')))
         self.trayIcon.activated.connect(self.iconActivated)
         self.trayIcon.setToolTip("SnipasteOCR - 截图自动识别")
         self.trayIcon.show()
@@ -247,7 +250,7 @@ class MainWindow(QMainWindow):
         # Logo和标题行
         titleLayout = QHBoxLayout()
         logoLabel = QLabel()
-        logoLabel.setPixmap(QIcon("assets/icon.png").pixmap(32, 32))
+        logoLabel.setPixmap(QIcon(get_resource_path('assets/icon.png')).pixmap(32, 32))
         titleLabel = QLabel("基于Snipaste的OCR工具")
         titleLabel.setObjectName("titleLabel")
         titleLayout.addWidget(logoLabel)

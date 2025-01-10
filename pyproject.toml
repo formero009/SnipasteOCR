@@ -6,10 +6,10 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "fastdeploy-python>=1.0.7",
-    "opencv-python>=4.10.0.84",
+    "opencv-python==4.10.0.84",
+    "pyinstaller>=6.11.1",
     "pyperclip>=1.9.0",
     "pyqt6>=6.8.0",
-    "pywin32>=308",
     "pyyaml>=6.0.2",
     "watchdog>=6.0.0",
 ]
