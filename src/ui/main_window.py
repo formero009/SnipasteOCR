@@ -5,6 +5,8 @@ from PyQt6.QtWidgets import (QMainWindow, QVBoxLayout, QLabel, QWidget,
                           QMenu, QSystemTrayIcon, QFrame, QMessageBox, QHBoxLayout, QLineEdit, QPushButton, QFileDialog, QDialog, QFormLayout, QDialogButtonBox, QComboBox, QApplication)
 import logging
 import yaml
+import winreg
+import sys
 
 from src.core.ocr_thread import OCRThread
 from src.ui.preview_window import PreviewWindow
@@ -203,6 +205,21 @@ class MainWindow(QMainWindow):
             QPushButton#previewButton[preview_off="true"]:hover {
                 background-color: #555555;
             }
+            QPushButton#autostartButton {
+                background-color: #00a67d;
+            }
+            QPushButton#autostartButton:hover {
+                background-color: #008f6c;
+            }
+            QPushButton#autostartButton:pressed {
+                background-color: #007d5e;
+            }
+            QPushButton#autostartButton[autostart_off="true"] {
+                background-color: #666666;
+            }
+            QPushButton#autostartButton[autostart_off="true"]:hover {
+                background-color: #555555;
+            }
             QLineEdit {
                 padding: 5px;
                 border: 1px solid #e0e0e0;
@@ -328,6 +345,12 @@ class MainWindow(QMainWindow):
         self.preview_button.clicked.connect(self.toggle_preview)
         self.preview_button.setProperty("preview_off", not self.preview_enabled)
         buttonLayout.addWidget(self.preview_button)
+        
+        # 自启动开关按钮
+        self.autostart_button = QPushButton('开机自启：关闭')
+        self.autostart_button.setObjectName("autostartButton")
+        self.autostart_button.clicked.connect(self.toggle_autostart)
+        buttonLayout.addWidget(self.autostart_button)
         
         buttonLayout.addStretch()
         
@@ -460,6 +483,9 @@ class MainWindow(QMainWindow):
                 self.preview_button.setProperty("preview_off", not self.preview_enabled)
                 self.preview_button.style().unpolish(self.preview_button)
                 self.preview_button.style().polish(self.preview_button)
+                
+                # 加载自启动状态
+                self.update_autostart_button()
                 
                 # 加载翻译设置
                 if 'translation' in config:
@@ -602,3 +628,46 @@ class MainWindow(QMainWindow):
 
     def get_translation_settings(self):
         return self.translation_settings.copy() 
+
+    def toggle_autostart(self):
+        """切换开机自启动状态"""
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_ALL_ACCESS)
+            app_path = os.path.abspath(sys.argv[0])
+            app_name = "SnipasteOCR"
+            
+            try:
+                winreg.QueryValueEx(key, app_name)
+                # 如果没有抛出异常，说明键存在，删除它
+                winreg.DeleteValue(key, app_name)
+                is_autostart = False
+            except WindowsError:
+                # 键不存在，创建它
+                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, f'"{app_path}"')
+                is_autostart = True
+                
+            winreg.CloseKey(key)
+            self.update_autostart_button()
+            
+        except Exception as e:
+            logger.error(f"Failed to toggle autostart: {str(e)}")
+            QMessageBox.warning(self, '错误', f'设置开机自启动失败: {str(e)}')
+
+    def update_autostart_button(self):
+        """更新自启动按钮状态"""
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_READ)
+            try:
+                winreg.QueryValueEx(key, "SnipasteOCR")
+                is_autostart = True
+            except WindowsError:
+                is_autostart = False
+            winreg.CloseKey(key)
+            
+            self.autostart_button.setText(f'开机自启：{"开启" if is_autostart else "关闭"}')
+            self.autostart_button.setProperty("autostart_off", not is_autostart)
+            self.autostart_button.style().unpolish(self.autostart_button)
+            self.autostart_button.style().polish(self.autostart_button)
+            
+        except Exception as e:
+            logger.error(f"Failed to update autostart button: {str(e)}") 

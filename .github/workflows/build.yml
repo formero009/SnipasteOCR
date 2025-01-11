@@ -12,7 +12,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    
+
     steps:
     - uses: actions/checkout@v4
     
@@ -20,47 +20,60 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-        
-    - name: Install uv
-      run: |
-        pip install uv
-        
+
+    - name: Cache Python packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
     - name: Install dependencies
       run: |
+        python -m venv .venv
+        source .venv/bin/activate
+        pip install --upgrade pip
+        pip install uv
         uv sync
-        
+
     - name: Build Release
       run: |
-        uv run pyinstaller -w main.py `
-          --collect-all fastdeploy `
-          --name=SnipasteOCR `
-          --icon=assets/icon.ico `
-          --add-data="models;models" `
-          --add-data="assets;assets" `
-          --add-data="config.yml;." `
-          --hidden-import=pyqt6 `
-          --hidden-import=PyQt6.QtWidgets `
-          --hidden-import=PyQt6.QtGui `
-          --hidden-import=PyQt6.QtCore `
-          --hidden-import=PyQt6.sip `
-          --clean `
+        uv run pyinstaller -w main.py ^
+          --collect-all fastdeploy ^
+          --name=SnipasteOCR ^
+          --icon=assets/icon.ico ^
+          --add-data="models;models" ^
+          --add-data="assets;assets" ^
+          --add-data="config.yml;." ^
+          --hidden-import=pyqt6 ^
+          --hidden-import=PyQt6.QtWidgets ^
+          --hidden-import=PyQt6.QtGui ^
+          --hidden-import=PyQt6.QtCore ^
+          --hidden-import=PyQt6.sip ^
+          --clean ^
           --noconfirm
-          
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: SnipasteOCR-release
-        path: dist/SnipasteOCR
+
+    - name: Debug Dist Path
+      run: |
+        dir dist
 
     - name: Create Zip Archive
+      shell: pwsh
       run: |
         Compress-Archive -Path "dist/SnipasteOCR/*" -DestinationPath "SnipasteOCR.zip"
-        
+
+    - name: Verify Release Artifact
+      run: |
+        if (!(Test-Path -Path "SnipasteOCR.zip")) {
+          Write-Error "SnipasteOCR.zip not found!"
+        }
+
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.TOKEN }}
       with:
         files: SnipasteOCR.zip
         draft: false
@@ -71,4 +84,4 @@ jobs:
           
           ### 下载说明
           - 下载 SnipasteOCR.zip
-          - 解压后运行 SnipasteOCR.exe 
+          - 解压后运行 SnipasteOCR.exe
