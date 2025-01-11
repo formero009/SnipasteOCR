@@ -2,8 +2,6 @@ name: Build SnipasteOCR
 
 on:
   push:
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -21,13 +19,15 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Cache Python packages
+    - name: Cache UV packages
       uses: actions/cache@v4
       with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        path: |
+          ~\AppData\Local\uv
+          ~\.cache\uv
+        key: ${{ runner.os }}-uv-${{ hashFiles('**/requirements.txt') }}
         restore-keys: |
-          ${{ runner.os }}-pip-
+          ${{ runner.os }}-uv-
     
     - name: Install dependencies
       run: |
@@ -38,50 +38,73 @@ jobs:
         uv sync
 
     - name: Build Release
+      shell: pwsh
       run: |
-        uv run pyinstaller -w main.py ^
-          --collect-all fastdeploy ^
-          --name=SnipasteOCR ^
-          --icon=assets/icon.ico ^
-          --add-data="models;models" ^
-          --add-data="assets;assets" ^
-          --add-data="config.yml;." ^
-          --hidden-import=pyqt6 ^
-          --hidden-import=PyQt6.QtWidgets ^
-          --hidden-import=PyQt6.QtGui ^
-          --hidden-import=PyQt6.QtCore ^
-          --hidden-import=PyQt6.sip ^
-          --clean ^
+        uv run pyinstaller -w main.py `
+          --name=SnipasteOCR `
+          --icon=assets/icon.ico `
+          --add-data="models;models" `
+          --add-data="assets;assets" `
+          --add-data="config.yml;." `
+          --hidden-import=pyqt6 `
+          --hidden-import=PyQt6.QtWidgets `
+          --hidden-import=PyQt6.QtGui `
+          --hidden-import=PyQt6.QtCore `
+          --hidden-import=PyQt6.sip `
+          --clean `
           --noconfirm
-
-    - name: Debug Dist Path
-      run: |
-        dir dist
+        
+        if (-not (Test-Path "dist/SnipasteOCR/SnipasteOCR.exe")) {
+            throw "Build failed: SnipasteOCR.exe not found"
+        }
 
     - name: Create Zip Archive
       shell: pwsh
       run: |
         Compress-Archive -Path "dist/SnipasteOCR/*" -DestinationPath "SnipasteOCR.zip"
-
-    - name: Verify Release Artifact
-      run: |
-        if (!(Test-Path -Path "SnipasteOCR.zip")) {
-          Write-Error "SnipasteOCR.zip not found!"
+        if (-not (Test-Path "SnipasteOCR.zip")) {
+            throw "Failed to create zip archive"
         }
 
-    - name: Create Release
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN }}
+    - name: Get Version
+      id: get_version
+      shell: pwsh
+      run: |
+        # 如果是tag push，使用tag名称
+        if ("${{ github.ref_type }}" -eq "tag") {
+          $version = "${{ github.ref_name }}"
+        } else {
+          # 否则使用分支名称-commit短hash
+          $branch = "${{ github.ref }}".Replace('refs/heads/', '')
+          $hash = "${{ github.sha }}".Substring(0, 7)
+          $version = "${branch}-${hash}"
+        }
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+
+    - name: Delete existing release
+      uses: dev-drprasad/delete-tag-and-release@v1.0
       with:
+        tag_name: ${{ steps.get_version.outputs.version }}
+        github_token: ${{ github.token }}
+        delete_release: true
+      continue-on-error: true
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.get_version.outputs.version }}
         files: SnipasteOCR.zip
         draft: false
-        prerelease: false
-        name: Release ${{ github.ref_name }}
+        prerelease: ${{ github.ref_type != 'tag' }}
+        name: Release ${{ steps.get_version.outputs.version }}
         body: |
-          SnipasteOCR Release ${{ github.ref_name }}
+          SnipasteOCR Release ${{ steps.get_version.outputs.version }}
           
           ### 下载说明
           - 下载 SnipasteOCR.zip
           - 解压后运行 SnipasteOCR.exe
+          
+          ### 构建信息
+          - 分支: ${{ github.ref_name }}
+          - 提交: ${{ github.sha }}
+          - 时间: ${{ github.event.head_commit.timestamp }}
