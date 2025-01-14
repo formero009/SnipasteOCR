@@ -1,6 +1,6 @@
 snipaste:
-  modelpath: C:/Users/formero/Desktop/projects/SnipasteOCR/models
-  path: C:/Users/formero/Pictures/snipaste
+  modelpath:
+  path:
   preview_enabled: true
 translation:
   from_lang: auto
