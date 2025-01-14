@@ -28,6 +28,7 @@ class MainWindow(QMainWindow):
         
         self.ocrThread = OCRThread()
         self.ocrThread.preview_signal.connect(self.show_preview)
+        self.ocrThread.error_signal.connect(self.show_ocr_error)
         self.preview_window = None
         self.preview_enabled = True
         
@@ -134,6 +135,9 @@ class MainWindow(QMainWindow):
         self.trayIcon.show()
 
     def initData(self):
+        self.ocrThread = OCRThread()
+        self.ocrThread.preview_signal.connect(self.show_preview)
+        self.ocrThread.error_signal.connect(self.show_ocr_error)
         self.ocrThread.start()
 
     def initStyle(self):
@@ -532,7 +536,27 @@ class MainWindow(QMainWindow):
             with open(config_path, 'w', encoding='utf-8') as f:
                 yaml.dump(existing_config, f, allow_unicode=True)
 
-            QMessageBox.information(self, '成功', '设置已保存')
+            # 重新启动OCR线程
+            if self.ocrThread is not None:
+                self.ocrThread.stop()
+                self.ocrThread.quit()
+                if not self.ocrThread.wait(1000):
+                    logger.warning("OCR thread did not exit in time, forcing termination")
+                    self.ocrThread.terminate()
+                    self.ocrThread.wait()
+            
+            # 创建新的OCR线程
+            self.ocrThread = OCRThread()
+            self.ocrThread.preview_signal.connect(self.show_preview)
+            self.ocrThread.error_signal.connect(self.show_ocr_error)
+            self.ocrThread.start()
+
+            QMessageBox.information(self, '成功', '设置已保存并重新加载OCR服务')
+            
+            # 重新启用预览按钮（如果之前被禁用）
+            self.preview_button.setEnabled(True)
+            self.preview_button.setToolTip('')
+            
         except Exception as e:
             logger.error(f"Failed to save configuration: {str(e)}")
             QMessageBox.warning(self, '错误', f'保存配置文件失败: {str(e)}')
@@ -671,3 +695,10 @@ class MainWindow(QMainWindow):
             
         except Exception as e:
             logger.error(f"Failed to update autostart button: {str(e)}") 
+
+    def show_ocr_error(self, error_msg):
+        """显示OCR错误消息"""
+        QMessageBox.warning(self, '错误', error_msg)
+        # 禁用预览按钮，因为OCR服务未正常启动
+        self.preview_button.setEnabled(False)
+        self.preview_button.setToolTip('OCR服务未正常启动') 
