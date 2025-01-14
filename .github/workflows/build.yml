@@ -40,6 +40,7 @@ jobs:
       run: |
         uv run pyinstaller -w main.py `
           --name=SnipasteOCR `
+          --collect-all fastdeploy `
           --icon=assets/icon.ico `
           --add-data="models;models" `
           --add-data="assets;assets" `
