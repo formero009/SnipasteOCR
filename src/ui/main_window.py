@@ -7,6 +7,7 @@ import logging
 import yaml
 import winreg
 import sys
+import ctypes
 
 from src.core.ocr_thread import OCRThread
 from src.ui.preview_window import PreviewWindow
@@ -39,6 +40,9 @@ class MainWindow(QMainWindow):
             'from_lang': 'auto',
             'to_lang': 'zh'
         }
+        
+        # 检测系统是否为暗色模式
+        self.is_dark_mode = self.check_windows_dark_mode()
         
         self.initUI()
         self.initData()
@@ -141,120 +145,272 @@ class MainWindow(QMainWindow):
         self.ocrThread.start()
 
     def initStyle(self):
-        self.setStyleSheet("""
-            QWidget#MainWindow {
-                background-color: #f5f5f5;
-            }
-            QFrame {
-                background-color: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 4px;
-            }
-            QLabel {
-                background: transparent;
-                border: none;
-                color: #333333;
-                font-size: 13px;
-            }
-            #titleLabel {
-                color: #1a1a1a;
-                font-size: 20px;
-                font-weight: bold;
-                padding: 5px;
-            }
-            #authorLabel {
-                color: #666666;
-                font-size: 12px;
-            }
-            #descLabel {
-                color: #666666;
-                font-size: 12px;
-                padding: 5px;
-                line-height: 1.3;
-            }
-            #githubLink {
-                color: #2d5af7;
-                font-size: 12px;
-            }
-            #starLabel {
-                color: #ff6b6b;
-                font-size: 12px;
-            }
-            QPushButton {
-                background-color: #2d5af7;
-                color: white;
-                border: none;
-                padding: 5px 10px;
-                border-radius: 4px;
-                min-width: 60px;
-            }
-            QPushButton:hover {
-                background-color: #1e4aef;
-            }
-            QPushButton:pressed {
-                background-color: #1a42d8;
-            }
-            QPushButton#previewButton {
-                background-color: #00a67d;
-            }
-            QPushButton#previewButton:hover {
-                background-color: #008f6c;
-            }
-            QPushButton#previewButton:pressed {
-                background-color: #007d5e;
-            }
-            QPushButton#previewButton[preview_off="true"] {
-                background-color: #666666;
-            }
-            QPushButton#previewButton[preview_off="true"]:hover {
-                background-color: #555555;
-            }
-            QPushButton#autostartButton {
-                background-color: #00a67d;
-            }
-            QPushButton#autostartButton:hover {
-                background-color: #008f6c;
-            }
-            QPushButton#autostartButton:pressed {
-                background-color: #007d5e;
-            }
-            QPushButton#autostartButton[autostart_off="true"] {
-                background-color: #666666;
-            }
-            QPushButton#autostartButton[autostart_off="true"]:hover {
-                background-color: #555555;
-            }
-            QLineEdit {
-                padding: 5px;
-                border: 1px solid #e0e0e0;
-                border-radius: 4px;
-                background-color: #f5f5f5;
-                color: #666666;
-                selection-background-color: #2d5af7;
-            }
-            QLineEdit:focus {
-                border: 1px solid #2d5af7;
-                background-color: white;
-                color: #333333;
-            }
-            QLineEdit:disabled {
-                background-color: #f5f5f5;
-                color: #666666;
-            }
-            QMenu {
-                background-color: white;
-                border: 1px solid #e0e0e0;
-                padding: 5px;
-            }
-            QMenu::item {
-                padding: 5px 25px 5px 20px;
-                border-radius: 3px;
-            }
-            QMenu::item:selected {
-                background-color: #f0f2f5;
-                color: #2d5af7;
-            }
-        """)
+        if self.is_dark_mode:
+            # 暗色模式样式
+            self.setStyleSheet("""
+                QWidget#MainWindow {
+                    background-color: #1e1e1e;
+                }
+                QFrame {
+                    background-color: #2d2d2d;
+                    border: 1px solid #3a3a3a;
+                    border-radius: 4px;
+                }
+                QLabel {
+                    background: transparent;
+                    border: none;
+                    color: #e0e0e0;
+                    font-size: 13px;
+                }
+                #titleLabel {
+                    color: #ffffff;
+                    font-size: 20px;
+                    font-weight: bold;
+                    padding: 5px;
+                }
+                #authorLabel {
+                    color: #b0b0b0;
+                    font-size: 12px;
+                }
+                #descLabel {
+                    color: #b0b0b0;
+                    font-size: 12px;
+                    padding: 5px;
+                    line-height: 1.3;
+                }
+                #githubLink {
+                    color: #5f85f0;
+                    font-size: 12px;
+                }
+                #starLabel {
+                    color: #ff8080;
+                    font-size: 12px;
+                }
+                QPushButton {
+                    background-color: #2d5af7;
+                    color: white;
+                    border: none;
+                    padding: 5px 10px;
+                    border-radius: 4px;
+                    min-width: 60px;
+                }
+                QPushButton:hover {
+                    background-color: #1e4aef;
+                }
+                QPushButton:pressed {
+                    background-color: #1a42d8;
+                }
+                QPushButton#previewButton {
+                    background-color: #00a67d;
+                }
+                QPushButton#previewButton:hover {
+                    background-color: #008f6c;
+                }
+                QPushButton#previewButton:pressed {
+                    background-color: #007d5e;
+                }
+                QPushButton#previewButton[preview_off="true"] {
+                    background-color: #666666;
+                }
+                QPushButton#previewButton[preview_off="true"]:hover {
+                    background-color: #555555;
+                }
+                QPushButton#autostartButton {
+                    background-color: #00a67d;
+                }
+                QPushButton#autostartButton:hover {
+                    background-color: #008f6c;
+                }
+                QPushButton#autostartButton:pressed {
+                    background-color: #007d5e;
+                }
+                QPushButton#autostartButton[autostart_off="true"] {
+                    background-color: #666666;
+                }
+                QPushButton#autostartButton[autostart_off="true"]:hover {
+                    background-color: #555555;
+                }
+                QLineEdit {
+                    padding: 5px;
+                    border: 1px solid #3a3a3a;
+                    border-radius: 4px;
+                    background-color: #3a3a3a;
+                    color: #e0e0e0;
+                    selection-background-color: #2d5af7;
+                }
+                QLineEdit:focus {
+                    border: 1px solid #2d5af7;
+                    background-color: #454545;
+                    color: #ffffff;
+                }
+                QLineEdit:disabled {
+                    background-color: #383838;
+                    color: #a0a0a0;
+                }
+                QMenu {
+                    background-color: #2d2d2d;
+                    border: 1px solid #3a3a3a;
+                    padding: 5px;
+                }
+                QMenu::item {
+                    padding: 5px 25px 5px 20px;
+                    border-radius: 3px;
+                    color: #e0e0e0;
+                }
+                QMenu::item:selected {
+                    background-color: #3a3a3a;
+                    color: #5f85f0;
+                }
+                QMenuBar {
+                    background-color: #2d2d2d;
+                    color: #e0e0e0;
+                }
+                QMenuBar::item {
+                    background-color: transparent;
+                    padding: 4px 10px;
+                }
+                QMenuBar::item:selected {
+                    background-color: #3a3a3a;
+                    color: #5f85f0;
+                }
+                QComboBox {
+                    background-color: #3a3a3a;
+                    color: #e0e0e0;
+                    border: 1px solid #3a3a3a;
+                    border-radius: 4px;
+                    padding: 5px;
+                }
+                QComboBox::drop-down {
+                    subcontrol-origin: padding;
+                    subcontrol-position: top right;
+                    width: 15px;
+                    border-left-width: 1px;
+                    border-left-color: #3a3a3a;
+                    border-left-style: solid;
+                }
+                QComboBox QAbstractItemView {
+                    background-color: #2d2d2d;
+                    color: #e0e0e0;
+                    selection-background-color: #3a3a3a;
+                    selection-color: #5f85f0;
+                }
+            """)
+        else:
+            # 亮色模式样式（原始样式）
+            self.setStyleSheet("""
+                QWidget#MainWindow {
+                    background-color: #f5f5f5;
+                }
+                QFrame {
+                    background-color: #ffffff;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 4px;
+                }
+                QLabel {
+                    background: transparent;
+                    border: none;
+                    color: #333333;
+                    font-size: 13px;
+                }
+                #titleLabel {
+                    color: #1a1a1a;
+                    font-size: 20px;
+                    font-weight: bold;
+                    padding: 5px;
+                }
+                #authorLabel {
+                    color: #666666;
+                    font-size: 12px;
+                }
+                #descLabel {
+                    color: #666666;
+                    font-size: 12px;
+                    padding: 5px;
+                    line-height: 1.3;
+                }
+                #githubLink {
+                    color: #2d5af7;
+                    font-size: 12px;
+                }
+                #starLabel {
+                    color: #ff6b6b;
+                    font-size: 12px;
+                }
+                QPushButton {
+                    background-color: #2d5af7;
+                    color: white;
+                    border: none;
+                    padding: 5px 10px;
+                    border-radius: 4px;
+                    min-width: 60px;
+                }
+                QPushButton:hover {
+                    background-color: #1e4aef;
+                }
+                QPushButton:pressed {
+                    background-color: #1a42d8;
+                }
+                QPushButton#previewButton {
+                    background-color: #00a67d;
+                }
+                QPushButton#previewButton:hover {
+                    background-color: #008f6c;
+                }
+                QPushButton#previewButton:pressed {
+                    background-color: #007d5e;
+                }
+                QPushButton#previewButton[preview_off="true"] {
+                    background-color: #666666;
+                }
+                QPushButton#previewButton[preview_off="true"]:hover {
+                    background-color: #555555;
+                }
+                QPushButton#autostartButton {
+                    background-color: #00a67d;
+                }
+                QPushButton#autostartButton:hover {
+                    background-color: #008f6c;
+                }
+                QPushButton#autostartButton:pressed {
+                    background-color: #007d5e;
+                }
+                QPushButton#autostartButton[autostart_off="true"] {
+                    background-color: #666666;
+                }
+                QPushButton#autostartButton[autostart_off="true"]:hover {
+                    background-color: #555555;
+                }
+                QLineEdit {
+                    padding: 5px;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 4px;
+                    background-color: #f5f5f5;
+                    color: #666666;
+                    selection-background-color: #2d5af7;
+                }
+                QLineEdit:focus {
+                    border: 1px solid #2d5af7;
+                    background-color: white;
+                    color: #333333;
+                }
+                QLineEdit:disabled {
+                    background-color: #f5f5f5;
+                    color: #666666;
+                }
+                QMenu {
+                    background-color: white;
+                    border: 1px solid #e0e0e0;
+                    padding: 5px;
+                }
+                QMenu::item {
+                    padding: 5px 25px 5px 20px;
+                    border-radius: 3px;
+                }
+                QMenu::item:selected {
+                    background-color: #f0f2f5;
+                    color: #2d5af7;
+                }
+            """)
 
     def initLayout(self):
         # 主布局
@@ -702,3 +858,16 @@ class MainWindow(QMainWindow):
         # 禁用预览按钮，因为OCR服务未正常启动
         self.preview_button.setEnabled(False)
         self.preview_button.setToolTip('OCR服务未正常启动') 
+
+    def check_windows_dark_mode(self):
+        """检测Windows系统是否处于暗色模式"""
+        try:
+            registry = winreg.ConnectRegistry(None, winreg.HKEY_CURRENT_USER)
+            key = winreg.OpenKey(registry, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+            value, regtype = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            winreg.CloseKey(key)
+            # 如果返回0，表示使用暗色主题
+            return value == 0
+        except Exception as e:
+            logger.error(f"Failed to check dark mode: {str(e)}")
+            return False 
