@@ -1,7 +1,15 @@
 name: Build SnipasteOCR
 
 on:
+  # Trigger on closed pull requests targeting the main branch
+  pull_request:
+    types: [closed]
+    branches: [main]
+  # Trigger on tag pushes (e.g., v1.0, v2.3.4)
   push:
+    tags:
+      - 'v*' # Adjust pattern if needed
+  # Allow manual triggering
   workflow_dispatch:
 
 permissions:
@@ -9,6 +17,12 @@ permissions:
   
 jobs:
   build:
+    # Add condition to run only on merged PRs to main, tag pushes, or manual dispatch
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
+      (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main')
+    
     strategy:
       matrix:
         os: [windows-latest, ubuntu-20.04]
@@ -138,15 +152,26 @@ jobs:
         # 如果是tag push，使用tag名称
         if [ "${{ github.ref_type }}" = "tag" ]; then
           version="${{ github.ref_name }}"
+        elif [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.action }}" = "closed" ] && [ "${{ github.event.pull_request.merged }}" = "true" ]; then
+          # Merged PR to main: use main-YYYYMMDD-short_hash
+          hash="${{ github.sha }}" # Merge commit SHA
+          hash=${hash:0:7}
+          date_str=$(date +'%Y%m%d')
+          version="main-${date_str}-${hash}"
+        elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          # Manual trigger: use manual-YYYYMMDD-short_hash
+          hash="${{ github.sha }}" # Commit SHA from workflow_dispatch context
+          hash=${hash:0:7}
+          date_str=$(date +'%Y%m%d')
+          version="manual-${date_str}-${hash}"
         else
-          # 否则使用分支名称-commit短hash
-          branch="${{ github.ref }}"
-          branch=${branch#refs/heads/}
+          # Fallback (should ideally not be reached with current triggers)
           hash="${{ github.sha }}"
           hash=${hash:0:7}
-          version="${branch}-${hash}"
+          version="unknown-${hash}"
         fi
         echo "version=$version" >> $GITHUB_OUTPUT
+        echo "Generated build version: $version" # Logging
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
@@ -156,6 +181,13 @@ jobs:
         
   release:
     needs: build
+    # Add condition to run only on merged PRs to main, tag pushes, or manual dispatch
+    if: |
+      needs.build.result == 'success' && (
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
+        (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main')
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
@@ -168,15 +200,26 @@ jobs:
           # 如果是tag push，使用tag名称
           if [ "${{ github.ref_type }}" = "tag" ]; then
             version="${{ github.ref_name }}"
+          elif [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.action }}" = "closed" ] && [ "${{ github.event.pull_request.merged }}" = "true" ]; then
+            # Merged PR to main: use main-YYYYMMDD-short_hash
+            hash="${{ github.sha }}" # Merge commit SHA
+            hash=${hash:0:7}
+            date_str=$(date +'%Y%m%d')
+            version="main-${date_str}-${hash}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger: use manual-YYYYMMDD-short_hash
+            hash="${{ github.sha }}" # Commit SHA from workflow_dispatch context
+            hash=${hash:0:7}
+            date_str=$(date +'%Y%m%d')
+            version="manual-${date_str}-${hash}"
           else
-            # 否则使用分支名称-commit短hash
-            branch="${{ github.ref }}"
-            branch=${branch#refs/heads/}
+            # Fallback (should ideally not be reached with current triggers)
             hash="${{ github.sha }}"
             hash=${hash:0:7}
-            version="${branch}-${hash}"
+            version="unknown-${hash}"
           fi
           echo "version=$version" >> $GITHUB_OUTPUT
+          echo "Generated release version: $version" # Logging
           
       - name: Delete existing release
         uses: dev-drprasad/delete-tag-and-release@v1.0
@@ -198,7 +241,8 @@ jobs:
           name: Release ${{ steps.get_version.outputs.version }}
           body: |
             SnipasteOCR Release ${{ steps.get_version.outputs.version }}
-            
+            ${{ github.event_name == 'pull_request' && format('\nMerged Pull Request: {0}\n', github.event.pull_request.html_url) || '' }}
+
             ### 下载说明
             
             | 系统    | 下载文件                      | 说明                                          |
@@ -207,6 +251,12 @@ jobs:
             | Linux   | `SnipasteOCR-Linux.tar.gz`   | 解压后 (`tar xzf ...`) 进入目录运行 `SnipasteOCR` |
             
             ### 构建信息
-            - 分支: ${{ github.ref_name }}
-            - 提交: ${{ github.sha }}
-            - 时间: ${{ github.event.head_commit.timestamp }}
+            - Trigger: ${{ github.event_name }}
+            - Ref: ${{ github.ref }}
+            - Commit SHA: ${{ github.sha }}
+            - Build Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            ${{ github.event_name == 'pull_request' && format('- Base Branch: {0}', github.event.pull_request.base.ref) || '' }}
+            ${{ github.event_name == 'pull_request' && format('- PR Number: {0}', github.event.number) || '' }}
+            ${{ github.ref_type == 'tag' && format('- Tag: {0}', github.ref_name) || '' }}
+            -构建时间: $(date -u +"%Y-%m-%dT%H:%M:%SZ") # Replaced timestamp with current time
+            # - 时间: ${{ github.event.head_commit.timestamp }} # This might not be reliable/available; replaced above
