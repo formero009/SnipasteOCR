@@ -11,7 +11,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-20.04]
         include:
           - os: windows-latest
             platform: win
@@ -21,9 +21,15 @@ jobs:
               if (-not (Test-Path "SnipasteOCR-Windows.zip")) {
                   throw "Failed to create zip archive"
               }
-          - os: ubuntu-latest
+          - os: ubuntu-20.04
             platform: linux
-            asset_name: SnipasteOCR-Linux.AppImage
+            asset_name: SnipasteOCR-Linux.tar.gz
+            archive_command: |
+              tar czf SnipasteOCR-Linux.tar.gz -C dist/SnipasteOCR .
+              if [[ ! -f "SnipasteOCR-Linux.tar.gz" ]]; then
+                  echo "Failed to create tar archive"
+                  exit 1
+              fi
     
     runs-on: ${{ matrix.os }}
 
@@ -91,7 +97,7 @@ jobs:
         EOF
         cp assets/icon.ico assets/SnipasteOCR.ico
 
-    - name: Build Release (Linux AppImage)
+    - name: Build Release (Linux)
       if: matrix.platform == 'linux'
       shell: bash
       run: |
@@ -115,29 +121,15 @@ jobs:
           exit 1
         fi
 
-        wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O linuxdeploy
-        wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-pyinstaller/releases/download/continuous/linuxdeploy-plugin-pyinstaller-x86_64.AppImage -O linuxdeploy-plugin-pyinstaller
-        wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
-        chmod +x linuxdeploy linuxdeploy-plugin-pyinstaller appimagetool
-
-        export APPDIR_PATH=AppDir
-        ./linuxdeploy --appdir $APPDIR_PATH --executable dist/SnipasteOCR/SnipasteOCR \
-            --plugin pyinstaller \
-            --desktop-file=./assets/SnipasteOCR.desktop \
-            --icon-file=./assets/SnipasteOCR.ico \
-            --output appimage
-
-        ./appimagetool $APPDIR_PATH ${{ matrix.asset_name }}
-
-        if [[ ! -f "${{ matrix.asset_name }}" ]]; then
-          echo "AppImage build failed: ${{ matrix.asset_name }} not found"
-          exit 1
-        fi
-
     - name: Create Archive (Windows only)
       if: matrix.platform == 'win'
       shell: pwsh
       run: ${{ matrix.zip_command }}
+
+    - name: Create Archive (Linux only)
+      if: matrix.platform == 'linux'
+      shell: bash
+      run: ${{ matrix.archive_command }}
 
     - name: Get Version
       id: get_version
@@ -200,7 +192,7 @@ jobs:
           tag_name: ${{ steps.get_version.outputs.version }}
           files: |
             SnipasteOCR-win/SnipasteOCR-Windows.zip
-            SnipasteOCR-linux/SnipasteOCR-Linux.AppImage
+            SnipasteOCR-linux/SnipasteOCR-Linux.tar.gz
           draft: false
           prerelease: ${{ github.ref_type != 'tag' }}
           name: Release ${{ steps.get_version.outputs.version }}
@@ -209,10 +201,10 @@ jobs:
             
             ### 下载说明
             
-            | 系统    | 下载文件                      | 说明                                   |
-            | ------- | ----------------------------- | -------------------------------------- |
-            | Windows | `SnipasteOCR-Windows.zip` | 解压后运行 `SnipasteOCR.exe`           |
-            | Linux   | `SnipasteOCR-Linux.AppImage`   | 添加执行权限 (`chmod +x`) 后直接运行   |
+            | 系统    | 下载文件                      | 说明                                          |
+            | ------- | ----------------------------- | --------------------------------------------- |
+            | Windows | `SnipasteOCR-Windows.zip` | 解压后运行 `SnipasteOCR.exe`                  |
+            | Linux   | `SnipasteOCR-Linux.tar.gz`   | 解压后 (`tar xzf ...`) 进入目录运行 `SnipasteOCR` |
             
             ### 构建信息
             - 分支: ${{ github.ref_name }}
