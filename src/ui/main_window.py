@@ -1,13 +1,13 @@
 import os
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QIcon, QCursor, QAction
+from PyQt6.QtGui import QIcon, QCursor, QAction, QPalette
 from PyQt6.QtWidgets import (QMainWindow, QVBoxLayout, QLabel, QWidget, 
                           QMenu, QSystemTrayIcon, QFrame, QMessageBox, QHBoxLayout, QLineEdit, QPushButton, QFileDialog, QDialog, QFormLayout, QDialogButtonBox, QComboBox, QApplication)
 import logging
 import yaml
-import winreg
 import sys
-import ctypes
+import platform
+import pathlib
 
 from src.core.ocr_thread import OCRThread
 from src.ui.preview_window import PreviewWindow
@@ -16,6 +16,8 @@ from ..core.resource_path import get_resource_path
 
 # Initialize logger for this module
 logger = logging.getLogger(__name__)
+
+APP_NAME = "SnipasteOCR"
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -27,9 +29,7 @@ class MainWindow(QMainWindow):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         
-        self.ocrThread = OCRThread()
-        self.ocrThread.preview_signal.connect(self.show_preview)
-        self.ocrThread.error_signal.connect(self.show_ocr_error)
+        self.ocrThread = None
         self.preview_window = None
         self.preview_enabled = True
         
@@ -42,7 +42,7 @@ class MainWindow(QMainWindow):
         }
         
         # 检测系统是否为暗色模式
-        self.is_dark_mode = self.check_windows_dark_mode()
+        self.is_dark_mode = self.check_dark_mode()
         
         self.initUI()
         self.initData()
@@ -53,6 +53,7 @@ class MainWindow(QMainWindow):
         self.create_translation_settings_menu()
         
     def initUI(self):
+        self.setObjectName("MainWindow")
         self.setGeometry(0, 0, 450, 300)
         self.setFixedSize(self.size())
         self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
@@ -88,7 +89,7 @@ class MainWindow(QMainWindow):
         self.trayIconMenu.setObjectName("trayMenu")
         
         # 添加程序标题（不可点击）
-        titleAction = QAction("SnipasteOCR", self)
+        titleAction = QAction(APP_NAME, self)
         titleAction.setIcon(QIcon(get_resource_path('assets/icon.png')))
         titleAction.setEnabled(False)
         self.trayIconMenu.addAction(titleAction)
@@ -135,19 +136,30 @@ class MainWindow(QMainWindow):
         self.trayIcon.setContextMenu(self.trayIconMenu)
         self.trayIcon.setIcon(QIcon(get_resource_path('assets/icon.png')))
         self.trayIcon.activated.connect(self.iconActivated)
-        self.trayIcon.setToolTip("SnipasteOCR - 截图自动识别")
+        self.trayIcon.setToolTip(f"{APP_NAME} - 截图自动识别")
         self.trayIcon.show()
 
     def initData(self):
-        self.ocrThread = OCRThread()
-        self.ocrThread.preview_signal.connect(self.show_preview)
-        self.ocrThread.error_signal.connect(self.show_ocr_error)
-        self.ocrThread.start()
+        if self.ocrThread is None or not self.ocrThread.isRunning():
+            try:
+                self.ocrThread = OCRThread()
+                self.ocrThread.preview_signal.connect(self.show_preview)
+                self.ocrThread.error_signal.connect(self.show_ocr_error)
+                self.ocrThread.start()
+                if hasattr(self, 'preview_button'):
+                    self.preview_button.setEnabled(True)
+                    self.preview_button.setToolTip('')
+            except Exception as e:
+                 logger.error(f"Failed to initialize or start OCR thread: {str(e)}")
+                 self.show_ocr_error(f"启动OCR服务时出错: {str(e)}\n请检查配置文件和模型路径。")
+                 if hasattr(self, 'preview_button'):
+                     self.preview_button.setEnabled(False)
+                     self.preview_button.setToolTip('OCR服务启动失败')
 
     def initStyle(self):
         if self.is_dark_mode:
             # 暗色模式样式
-            self.setStyleSheet("""
+            dark_stylesheet = """
                 QWidget#MainWindow {
                     background-color: #1e1e1e;
                 }
@@ -294,10 +306,35 @@ class MainWindow(QMainWindow):
                     selection-background-color: #3a3a3a;
                     selection-color: #5f85f0;
                 }
-            """)
+
+                /* Style for QMessageBox */
+                QMessageBox {
+                    background-color: #2d2d2d;
+                }
+                QMessageBox QLabel {
+                    color: #e0e0e0;
+                    background-color: transparent; /* Ensure label background is transparent */
+                }
+                QMessageBox QPushButton {
+                    background-color: #3a3a3a;
+                    color: #e0e0e0;
+                    border: 1px solid #555555;
+                    padding: 5px 15px;
+                    border-radius: 4px;
+                    min-width: 60px;
+                }
+                QMessageBox QPushButton:hover {
+                    background-color: #4a4a4a;
+                    border: 1px solid #777777;
+                }
+                QMessageBox QPushButton:pressed {
+                    background-color: #5a5a5a;
+                }
+            """
+            self.setStyleSheet(dark_stylesheet)
         else:
             # 亮色模式样式（原始样式）
-            self.setStyleSheet("""
+            light_stylesheet = """
                 QWidget#MainWindow {
                     background-color: #f5f5f5;
                 }
@@ -410,7 +447,8 @@ class MainWindow(QMainWindow):
                     background-color: #f0f2f5;
                     color: #2d5af7;
                 }
-            """)
+            """
+            self.setStyleSheet(light_stylesheet)
 
     def initLayout(self):
         # 主布局
@@ -540,13 +578,14 @@ class MainWindow(QMainWindow):
                 self.preview_window.close()
                 self.preview_window = None
 
-            if self.ocrThread is not None:
+            if self.ocrThread is not None and self.ocrThread.isRunning():
                 self.ocrThread.stop()
                 self.ocrThread.quit()
                 if not self.ocrThread.wait(1000):
                     logger.warning("OCR thread did not exit in time, forcing termination")
                     self.ocrThread.terminate()
                     self.ocrThread.wait()
+                self.ocrThread = None
             
             QApplication.quit()
         except Exception as e:
@@ -579,8 +618,8 @@ class MainWindow(QMainWindow):
             self.toggleWindowAction.setText("显示主窗口")
 
     def showAbout(self):
-        QMessageBox.about(self, "关于 SnipasteOCR",
-                         """<h3>SnipasteOCR v1.0</h3>
+        QMessageBox.about(self, f"关于 {APP_NAME}",
+                         f"""<h3>{APP_NAME} v1.0</h3>
                          <p>一个基于 PaddleOCR 的截图文字识别工具</p>
                          <p>作者: formero009</p>
                          <p>邮箱: wangchen2588@gmail.com</p>
@@ -625,9 +664,11 @@ class MainWindow(QMainWindow):
         self.loadConfig()
 
     def browse_folder(self, line_edit):
-        folder = QFileDialog.getExistingDirectory(self, '选择文件夹')
+        start_dir = line_edit.text() if os.path.isdir(line_edit.text()) else str(pathlib.Path.home())
+        folder = QFileDialog.getExistingDirectory(self, '选择文件夹', start_dir)
         if folder:
             line_edit.setText(folder)
+            line_edit.setToolTip(folder)
 
     def loadConfig(self):
         try:
@@ -636,18 +677,27 @@ class MainWindow(QMainWindow):
             
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f)
-                self.snipaste_path.setText(config['snipaste']['path'])
-                self.model_path.setText(config['snipaste'].get('modelpath', os.path.join(current_path, 'models')))
-                self.preview_enabled = config['snipaste'].get('preview_enabled', True)
-                self.preview_button.setText(f'预览窗口：{"开启" if self.preview_enabled else "关闭"}')
-                self.preview_button.setProperty("preview_off", not self.preview_enabled)
-                self.preview_button.style().unpolish(self.preview_button)
-                self.preview_button.style().polish(self.preview_button)
+                if hasattr(self, 'snipaste_path'):
+                    self.snipaste_path.setText(config['snipaste'].get('path', ''))
+                    self.snipaste_path.setToolTip(self.snipaste_path.text())
+                if hasattr(self, 'model_path'):
+                    default_model_path = os.path.join(current_path, 'models')
+                    modelpath_text = config['snipaste'].get('modelpath', default_model_path)
+                    self.model_path.setText(modelpath_text)
+                    self.model_path.setToolTip(modelpath_text)
+
+                snipaste_config = config.get('snipaste', {})
+                self.preview_enabled = snipaste_config.get('preview_enabled', True)
+
+                if hasattr(self, 'preview_button'):
+                    self.preview_button.setText(f'预览窗口：{"开启" if self.preview_enabled else "关闭"}')
+                    self.preview_button.setProperty("preview_off", not self.preview_enabled)
+                    self.preview_button.style().unpolish(self.preview_button)
+                    self.preview_button.style().polish(self.preview_button)
+                    
+                if hasattr(self, 'autostart_button'):
+                    self.update_autostart_button()
                 
-                # 加载自启动状态
-                self.update_autostart_button()
-                
-                # 加载翻译设置
                 if 'translation' in config:
                     self.translation_settings.update({
                         'secret_id': config['translation'].get('secret_id', ''),
@@ -655,6 +705,23 @@ class MainWindow(QMainWindow):
                         'from_lang': config['translation'].get('from_lang', 'auto'),
                         'to_lang': config['translation'].get('to_lang', 'zh')
                     })
+        except FileNotFoundError:
+            logger.warning(f"Configuration file not found at {config_path}. Using defaults.")
+            if hasattr(self, 'snipaste_path'):
+                self.snipaste_path.setText('')
+                self.snipaste_path.setToolTip('')
+            if hasattr(self, 'model_path'):
+                 default_model_path = os.path.join(current_path, 'models')
+                 self.model_path.setText(default_model_path)
+                 self.model_path.setToolTip(default_model_path)
+            self.preview_enabled = True
+            if hasattr(self, 'preview_button'):
+                 self.preview_button.setText('预览窗口：开启')
+                 self.preview_button.setProperty("preview_off", False)
+                 self.preview_button.style().unpolish(self.preview_button)
+                 self.preview_button.style().polish(self.preview_button)
+            if hasattr(self, 'autostart_button'):
+                 self.update_autostart_button()
         except Exception as e:
             logger.error(f"Failed to load configuration: {str(e)}")
             QMessageBox.warning(self, '错误', f'加载配置文件失败: {str(e)}')
@@ -724,18 +791,24 @@ class MainWindow(QMainWindow):
                 self.preview_window.close()
                 self.preview_window = None
 
-            if self.ocrThread is not None:
+            if self.ocrThread is not None and self.ocrThread.isRunning():
                 self.ocrThread.stop()
                 self.ocrThread.quit()
                 if not self.ocrThread.wait(1000):
-                    logger.warning("OCR thread did not exit in time, forcing termination")
+                    logger.warning("OCR thread did not exit in time during restart, forcing termination")
                     self.ocrThread.terminate()
                     self.ocrThread.wait()
-            
-            import sys
+                self.ocrThread = None
+
             program = sys.executable
+            args = sys.argv
+            logger.info(f"Relaunching: {program} {args}")
+            if platform.system() == "Windows" and ' ' in program:
+                 program = f'"{program}"'
+                 
             import subprocess
-            subprocess.Popen([program] + sys.argv)
+            subprocess.Popen([program] + args) 
+            
             QApplication.quit()
             
         except Exception as e:
@@ -810,64 +883,226 @@ class MainWindow(QMainWindow):
         return self.translation_settings.copy() 
 
     def toggle_autostart(self):
-        """切换开机自启动状态"""
+        """切换开机自启动状态 (Cross-platform)"""
+        current_os = platform.system()
+        is_enabled = False
+        set_successfully = False
+        
         try:
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_ALL_ACCESS)
-            app_path = os.path.abspath(sys.argv[0])
-            app_name = "SnipasteOCR"
-            
-            try:
-                winreg.QueryValueEx(key, app_name)
-                # 如果没有抛出异常，说明键存在，删除它
-                winreg.DeleteValue(key, app_name)
-                is_autostart = False
-            except WindowsError:
-                # 键不存在，创建它
-                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, f'"{app_path}"')
-                is_autostart = True
-                
-            winreg.CloseKey(key)
-            self.update_autostart_button()
-            
+            if current_os == "Windows":
+                is_enabled = self._is_windows_autostart_enabled()
+                self._set_windows_autostart(not is_enabled)
+                set_successfully = True
+            elif current_os == "Linux":
+                is_enabled = self._is_linux_autostart_enabled()
+                self._set_linux_autostart(not is_enabled)
+                set_successfully = True
+            else:
+                 logger.warning(f"Autostart not supported on this platform: {current_os}")
+                 QMessageBox.warning(self, '不支持', f'此操作系统 ({current_os}) 不支持开机自启动设置。')
+                 return
+
+            if set_successfully:
+                self.update_autostart_button()
+
         except Exception as e:
-            logger.error(f"Failed to toggle autostart: {str(e)}")
+            logger.error(f"Failed to toggle autostart on {current_os}: {str(e)}")
             QMessageBox.warning(self, '错误', f'设置开机自启动失败: {str(e)}')
+            self.update_autostart_button()
 
     def update_autostart_button(self):
-        """更新自启动按钮状态"""
+        """更新自启动按钮状态 (Cross-platform)"""
+        current_os = platform.system()
+        is_autostart = False
+        supported = True
+
         try:
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_READ)
-            try:
-                winreg.QueryValueEx(key, "SnipasteOCR")
-                is_autostart = True
-            except WindowsError:
-                is_autostart = False
-            winreg.CloseKey(key)
-            
-            self.autostart_button.setText(f'开机自启：{"开启" if is_autostart else "关闭"}')
-            self.autostart_button.setProperty("autostart_off", not is_autostart)
-            self.autostart_button.style().unpolish(self.autostart_button)
-            self.autostart_button.style().polish(self.autostart_button)
-            
+            if current_os == "Windows":
+                is_autostart = self._is_windows_autostart_enabled()
+            elif current_os == "Linux":
+                is_autostart = self._is_linux_autostart_enabled()
+            else:
+                logger.info(f"Autostart checking not implemented for {current_os}")
+                supported = False
+
+            if hasattr(self, 'autostart_button'):
+                 if supported:
+                     self.autostart_button.setText(f'开机自启：{"开启" if is_autostart else "关闭"}')
+                     self.autostart_button.setProperty("autostart_off", not is_autostart)
+                     self.autostart_button.setEnabled(True)
+                 else:
+                     self.autostart_button.setText('开机自启：不支持')
+                     self.autostart_button.setProperty("autostart_off", True)
+                     self.autostart_button.setEnabled(False)
+                 
+                 self.autostart_button.style().unpolish(self.autostart_button)
+                 self.autostart_button.style().polish(self.autostart_button)
+                 
         except Exception as e:
-            logger.error(f"Failed to update autostart button: {str(e)}") 
+             logger.error(f"Failed to update autostart button state on {current_os}: {str(e)}")
+             if hasattr(self, 'autostart_button'):
+                 self.autostart_button.setText('开机自启：错误')
+                 self.autostart_button.setEnabled(False)
 
     def show_ocr_error(self, error_msg):
         """显示OCR错误消息"""
         QMessageBox.warning(self, '错误', error_msg)
-        # 禁用预览按钮，因为OCR服务未正常启动
-        self.preview_button.setEnabled(False)
-        self.preview_button.setToolTip('OCR服务未正常启动') 
+        if hasattr(self, 'preview_button'):
+            self.preview_button.setEnabled(False)
+            self.preview_button.setToolTip('OCR服务未正常启动') 
 
-    def check_windows_dark_mode(self):
-        """检测Windows系统是否处于暗色模式"""
+    def check_dark_mode(self):
+        """检测系统是否处于暗色模式 (Cross-Platform)"""
+        current_os = platform.system()
+        
+        if current_os == "Windows":
+             return self._check_windows_dark_mode()
+        elif current_os == "Linux":
+            try:
+                window_color = self.palette().color(QPalette.ColorRole.Window)
+                text_color = self.palette().color(QPalette.ColorRole.WindowText)
+                is_dark = window_color.lightness() < text_color.lightness() or window_color.lightness() < 100
+                logger.debug(f"Linux dark mode check: Window lightness={window_color.lightness()}, Text lightness={text_color.lightness()}. Detected dark: {is_dark}")
+                return is_dark
+            except Exception as e:
+                logger.error(f"Failed to check Linux dark mode via Qt Palette: {str(e)}")
+                return False
+        else:
+            logger.info(f"Dark mode detection not implemented for OS: {current_os}. Assuming light mode.")
+            return False
+
+    def _check_windows_dark_mode(self):
+        """检测Windows系统是否处于暗色模式 (Windows Specific)"""
+        import winreg
         try:
             registry = winreg.ConnectRegistry(None, winreg.HKEY_CURRENT_USER)
             key = winreg.OpenKey(registry, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
             value, regtype = winreg.QueryValueEx(key, "AppsUseLightTheme")
             winreg.CloseKey(key)
-            # 如果返回0，表示使用暗色主题
+            logger.debug(f"Windows AppsUseLightTheme registry value: {value}")
             return value == 0
+        except FileNotFoundError:
+             logger.warning("Windows dark mode registry key 'AppsUseLightTheme' not found. Assuming light mode.")
+             return False
         except Exception as e:
-            logger.error(f"Failed to check dark mode: {str(e)}")
-            return False 
+            logger.error(f"Failed to check Windows dark mode via registry: {str(e)}")
+            return False
+
+    def _get_executable_path(self):
+        """Gets the absolute path to the executable."""
+        if getattr(sys, 'frozen', False):
+            # Running as a bundled app (PyInstaller)
+             path = sys.executable
+        else:
+            # Running as a script
+             path = os.path.abspath(sys.argv[0])
+             # If running via 'python -m src.main', argv[0] might be '-m'
+             if sys.argv[0] == '-m': 
+                 # Attempt to find the main script file path
+                 import inspect
+                 frame = inspect.currentframe()
+                 while frame.f_back:
+                     frame = frame.f_back
+                     module_name = frame.f_globals.get('__name__')
+                     if module_name == '__main__':
+                         path = os.path.abspath(frame.f_code.co_filename)
+                         break
+                 else: # Fallback if __main__ not found in call stack
+                      path = os.path.abspath(os.getcwd()) # Less ideal, but a fallback
+             elif not os.path.isabs(path):
+                  # Handle relative paths if not running with -m
+                  path = os.path.abspath(os.path.join(os.getcwd(), path))
+
+        # On Windows, ensure path is quoted if it contains spaces for registry/desktop files
+        if platform.system() == "Windows" and ' ' in path:
+              return f'"{path}"'
+        return path
+
+    def _get_windows_registry_key(self, access):
+        import winreg
+        try:
+            return winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, access)
+        except OSError as e:
+            logger.error(f"Failed to open registry key: {e}")
+            return None
+
+    def _is_windows_autostart_enabled(self):
+        import winreg
+        key = self._get_windows_registry_key(winreg.KEY_READ)
+        if not key:
+            return False
+        try:
+            winreg.QueryValueEx(key, APP_NAME)
+            winreg.CloseKey(key)
+            return True
+        except FileNotFoundError:
+            winreg.CloseKey(key)
+            return False
+        except OSError as e:
+            logger.error(f"Error checking Windows autostart registry value: {e}")
+            if key: winreg.CloseKey(key)
+            return False
+
+    def _set_windows_autostart(self, enabled: bool):
+        import winreg
+        key = self._get_windows_registry_key(winreg.KEY_ALL_ACCESS)
+        if not key:
+            raise OSError("Could not open registry key for writing.")
+        
+        app_path = self._get_executable_path()
+        try:
+            if enabled:
+                winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, app_path)
+                logger.info(f"Enabled Windows autostart: {APP_NAME} -> {app_path}")
+            else:
+                try:
+                    winreg.DeleteValue(key, APP_NAME)
+                    logger.info(f"Disabled Windows autostart: {APP_NAME}")
+                except FileNotFoundError:
+                    logger.info(f"Windows autostart entry not found for {APP_NAME}, nothing to disable.")
+            winreg.CloseKey(key)
+            return True
+        except OSError as e:
+            logger.error(f"Failed to set Windows autostart: {e}")
+            if key: winreg.CloseKey(key)
+            raise
+
+    def _get_linux_autostart_path(self):
+        autostart_dir = pathlib.Path.home() / ".config" / "autostart"
+        return autostart_dir / f"{APP_NAME}.desktop"
+
+    def _is_linux_autostart_enabled(self):
+        return self._get_linux_autostart_path().exists()
+
+    def _set_linux_autostart(self, enabled: bool):
+        desktop_file_path = self._get_linux_autostart_path()
+        autostart_dir = desktop_file_path.parent
+
+        try:
+            if enabled:
+                autostart_dir.mkdir(parents=True, exist_ok=True)
+                
+                exec_path = self._get_executable_path()
+                icon_path = os.path.abspath(get_resource_path('assets/icon.png'))
+                
+                desktop_content = f"""[Desktop Entry]
+Type=Application
+Name={APP_NAME}
+Exec={exec_path}
+Icon={icon_path}
+Comment=Snipaste OCR Tool based on PaddleOCR
+Terminal=false
+X-GNOME-Autostart-enabled=true
+"""
+                desktop_file_path.write_text(desktop_content, encoding='utf-8')
+                logger.info(f"Enabled Linux autostart: Created {desktop_file_path}")
+            else:
+                if desktop_file_path.exists():
+                    desktop_file_path.unlink()
+                    logger.info(f"Disabled Linux autostart: Removed {desktop_file_path}")
+                else:
+                     logger.info(f"Linux autostart file not found for {APP_NAME}, nothing to disable.")
+            return True
+        except (OSError, PermissionError, Exception) as e:
+            logger.error(f"Failed to set Linux autostart: {e}")
+            raise 

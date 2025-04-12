@@ -56,7 +56,8 @@ class OCRProcessor:
         """构建运行时选项"""
         option = fd.RuntimeOption()
         option.set_cpu_thread_num(6)
-        option.use_openvino_backend()
+        option.use_cpu() # Use default CPU backend
+        logger.info("Using default CPU backend for FastDeploy.")
         return option
 
     def process_image(self, image_path):

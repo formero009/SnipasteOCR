@@ -11,7 +11,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest]
         include:
           - os: windows-latest
             platform: win
@@ -21,24 +21,9 @@ jobs:
               if (-not (Test-Path "SnipasteOCR-Windows.zip")) {
                   throw "Failed to create zip archive"
               }
-          - os: macos-latest
-            platform: mac
-            asset_name: SnipasteOCR-macOS.zip
-            zip_command: |
-              cd dist && zip -r ../SnipasteOCR-macOS.zip SnipasteOCR
-              if [ ! -f "../SnipasteOCR-macOS.zip" ]; then
-                  echo "Failed to create zip archive"
-                  exit 1
-              fi
           - os: ubuntu-latest
             platform: linux
-            asset_name: SnipasteOCR-Linux.zip
-            zip_command: |
-              cd dist && zip -r ../SnipasteOCR-Linux.zip SnipasteOCR
-              if [ ! -f "../SnipasteOCR-Linux.zip" ]; then
-                  echo "Failed to create zip archive"
-                  exit 1
-              fi
+            asset_name: SnipasteOCR-Linux.AppImage
     
     runs-on: ${{ matrix.os }}
 
@@ -90,8 +75,24 @@ jobs:
             throw "Build failed: SnipasteOCR.exe not found"
         }
 
-    - name: Build Release (macOS/Linux)
-      if: matrix.platform == 'mac' || matrix.platform == 'linux'
+    - name: Create .desktop file (Linux)
+      if: matrix.platform == 'linux'
+      shell: bash
+      run: |
+        mkdir -p assets
+        cat <<EOF > assets/SnipasteOCR.desktop
+        [Desktop Entry]
+        Name=SnipasteOCR
+        Exec=AppRun %F
+        Icon=SnipasteOCR
+        Type=Application
+        Categories=Utility;
+        Comment=OCR tool integrated with Snipaste
+        EOF
+        cp assets/icon.ico assets/SnipasteOCR.ico
+
+    - name: Build Release (Linux AppImage)
+      if: matrix.platform == 'linux'
       shell: bash
       run: |
         uv run pyinstaller -w main.py \
@@ -109,16 +110,33 @@ jobs:
           --clean \
           --noconfirm
         
-        if [[ "${{ matrix.platform }}" == "mac" && ! -d "dist/SnipasteOCR.app" ]]; then
-          echo "Build failed: SnipasteOCR.app not found"
-          exit 1
-        elif [[ "${{ matrix.platform }}" == "linux" && ! -f "dist/SnipasteOCR/SnipasteOCR" ]]; then
-          echo "Build failed: SnipasteOCR executable not found"
+        if [[ ! -f "dist/SnipasteOCR/SnipasteOCR" ]]; then
+          echo "PyInstaller build failed: SnipasteOCR executable not found"
           exit 1
         fi
 
-    - name: Create Archive
-      shell: bash
+        wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O linuxdeploy
+        wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-pyinstaller/releases/download/continuous/linuxdeploy-plugin-pyinstaller-x86_64.AppImage -O linuxdeploy-plugin-pyinstaller
+        wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+        chmod +x linuxdeploy linuxdeploy-plugin-pyinstaller appimagetool
+
+        export APPDIR_PATH=AppDir
+        ./linuxdeploy --appdir $APPDIR_PATH --executable dist/SnipasteOCR/SnipasteOCR \
+            --plugin pyinstaller \
+            --desktop-file=./assets/SnipasteOCR.desktop \
+            --icon-file=./assets/SnipasteOCR.ico \
+            --output appimage
+
+        ./appimagetool $APPDIR_PATH ${{ matrix.asset_name }}
+
+        if [[ ! -f "${{ matrix.asset_name }}" ]]; then
+          echo "AppImage build failed: ${{ matrix.asset_name }} not found"
+          exit 1
+        fi
+
+    - name: Create Archive (Windows only)
+      if: matrix.platform == 'win'
+      shell: pwsh
       run: ${{ matrix.zip_command }}
 
     - name: Get Version
@@ -181,7 +199,8 @@ jobs:
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
           files: |
-            SnipasteOCR-*/SnipasteOCR-*.zip
+            SnipasteOCR-win/SnipasteOCR-Windows.zip
+            SnipasteOCR-linux/SnipasteOCR-Linux.AppImage
           draft: false
           prerelease: ${{ github.ref_type != 'tag' }}
           name: Release ${{ steps.get_version.outputs.version }}
@@ -189,9 +208,11 @@ jobs:
             SnipasteOCR Release ${{ steps.get_version.outputs.version }}
             
             ### 下载说明
-            - Windows: 下载 SnipasteOCR-Windows.zip，解压后运行 SnipasteOCR.exe
-            - macOS: 下载 SnipasteOCR-macOS.zip，解压后运行 SnipasteOCR 应用
-            - Linux: 下载 SnipasteOCR-Linux.zip，解压后运行 SnipasteOCR 可执行文件
+            
+            | 系统    | 下载文件                      | 说明                                   |
+            | ------- | ----------------------------- | -------------------------------------- |
+            | Windows | `SnipasteOCR-Windows.zip` | 解压后运行 `SnipasteOCR.exe`           |
+            | Linux   | `SnipasteOCR-Linux.AppImage`   | 添加执行权限 (`chmod +x`) 后直接运行   |
             
             ### 构建信息
             - 分支: ${{ github.ref_name }}
