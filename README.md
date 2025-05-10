@@ -3,7 +3,7 @@
 [![开源协议](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 基于 Snipaste 的截图文字识别工具，集成飞桨 OCR 模型，实现快速精准的文字识别。支持文本翻译功能，让截图识别更加便捷。
-
+   
 ## 💻 程序界面
 
 ### 主界面
