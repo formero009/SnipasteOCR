@@ -25,7 +25,7 @@ jobs:
     
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-20.04]
+        os: [windows-latest, ubuntu-22.04]
         include:
           - os: windows-latest
             platform: win
@@ -35,7 +35,7 @@ jobs:
               if (-not (Test-Path "SnipasteOCR-Windows.zip")) {
                   throw "Failed to create zip archive"
               }
-          - os: ubuntu-20.04
+          - os: ubuntu-22.04
             platform: linux
             asset_name: SnipasteOCR-Linux.tar.gz
             archive_command: |
