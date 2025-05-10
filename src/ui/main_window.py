@@ -330,6 +330,72 @@ class MainWindow(QMainWindow):
                 QMessageBox QPushButton:pressed {
                     background-color: #5a5a5a;
                 }
+
+                /* Style for QDialog */
+                QDialog {
+                    background-color: #2d2d2d;
+                    color: #e0e0e0;
+                }
+                QDialog QLabel {
+                    color: #e0e0e0;
+                    background-color: transparent;
+                }
+                QDialog QLineEdit {
+                    padding: 5px;
+                    border: 1px solid #3a3a3a;
+                    border-radius: 4px;
+                    background-color: #3a3a3a;
+                    color: #e0e0e0;
+                    selection-background-color: #2d5af7;
+                }
+                QDialog QLineEdit:focus {
+                    border: 1px solid #2d5af7;
+                    background-color: #454545;
+                    color: #ffffff;
+                }
+                QDialog QComboBox {
+                    background-color: #3a3a3a;
+                    color: #e0e0e0;
+                    border: 1px solid #3a3a3a;
+                    border-radius: 4px;
+                    padding: 5px;
+                    min-width: 6em;
+                }
+                QDialog QComboBox:hover {
+                    border: 1px solid #2d5af7;
+                }
+                QDialog QComboBox::drop-down {
+                    border: none;
+                    width: 20px;
+                }
+                QDialog QComboBox::down-arrow {
+                    width: 12px;
+                    height: 12px;
+                }
+                QDialog QComboBox QAbstractItemView {
+                    background-color: #2d2d2d;
+                    color: #e0e0e0;
+                    selection-background-color: #3a3a3a;
+                    selection-color: #5f85f0;
+                    border: 1px solid #3a3a3a;
+                }
+                QDialog QPushButton {
+                    background-color: #2d5af7;
+                    color: white;
+                    border: none;
+                    padding: 5px 15px;
+                    border-radius: 4px;
+                    min-width: 60px;
+                }
+                QDialog QPushButton:hover {
+                    background-color: #1e4aef;
+                }
+                QDialog QPushButton:pressed {
+                    background-color: #1a42d8;
+                }
+                QDialogButtonBox {
+                    background-color: transparent;
+                }
             """
             self.setStyleSheet(dark_stylesheet)
         else:
@@ -825,20 +891,33 @@ class MainWindow(QMainWindow):
     def show_translation_settings(self):
         dialog = QDialog(self)
         dialog.setWindowTitle('翻译设置')
+        dialog.setMinimumSize(400, 250)  # 设置最小宽度和高度，但允许更大
         layout = QFormLayout()
+        layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # 添加腾讯云翻译API说明文字
+        explanation_label = QLabel('以下设置用于腾讯云机器翻译API，<a href="https://console.cloud.tencent.com/cam/capi">点击此处</a>获取API密钥。')
+        explanation_label.setOpenExternalLinks(True)
+        explanation_label.setWordWrap(True)
+        layout.addRow(explanation_label)
         
         # SecretId输入
+        secret_id_layout = QHBoxLayout()
         secret_id_input = QLineEdit(self.translation_settings['secret_id'])
-        secret_id_input.setEchoMode(QLineEdit.EchoMode.Password)
-        layout.addRow('SecretId:', secret_id_input)
+        secret_id_layout.addWidget(secret_id_input)
+        layout.addRow('SecretId:', secret_id_layout)
         
         # SecretKey输入
+        secret_key_layout = QHBoxLayout()
         secret_key_input = QLineEdit(self.translation_settings['secret_key'])
-        secret_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        layout.addRow('SecretKey:', secret_key_input)
+        secret_key_layout.addWidget(secret_key_input)
+        layout.addRow('SecretKey:', secret_key_layout)
         
         # 源语言选择
         from_lang_input = QComboBox()
+        from_lang_input.setFixedHeight(30)
         langs = [('auto', '自动检测'), ('zh', '中文'), ('en', '英文'), ('ja', '日文'), ('ko', '韩文')]
         for code, name in langs:
             from_lang_input.addItem(name, code)
@@ -850,6 +929,7 @@ class MainWindow(QMainWindow):
         
         # 目标语言选择
         to_lang_input = QComboBox()
+        to_lang_input.setFixedHeight(30)
         target_langs = langs[1:]  # 移除'auto'选项
         for code, name in target_langs:
             to_lang_input.addItem(name, code)
@@ -863,11 +943,20 @@ class MainWindow(QMainWindow):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        # 设置按钮文本为中文
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("确定")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addRow(buttons)
         
         dialog.setLayout(layout)
+        
+        dialog.setWindowFlags(Qt.WindowType.Dialog | 
+                            Qt.WindowType.CustomizeWindowHint |
+                            Qt.WindowType.WindowTitleHint |
+                            Qt.WindowType.WindowCloseButtonHint)
+        dialog.setModal(True)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.translation_settings.update({
@@ -878,9 +967,9 @@ class MainWindow(QMainWindow):
             })
             # 保存配置
             self.saveConfig()
-
+            
     def get_translation_settings(self):
-        return self.translation_settings.copy() 
+        return self.translation_settings.copy()
 
     def toggle_autostart(self):
         """切换开机自启动状态 (Cross-platform)"""
@@ -1105,4 +1194,4 @@ X-GNOME-Autostart-enabled=true
             return True
         except (OSError, PermissionError, Exception) as e:
             logger.error(f"Failed to set Linux autostart: {e}")
-            raise 
+            raise
