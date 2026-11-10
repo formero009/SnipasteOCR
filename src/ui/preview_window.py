@@ -1,3 +1,5 @@
+from threading import Event
+
 import cv2
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QPainter, QPixmap, QImage, QColor
@@ -5,29 +7,33 @@ from PyQt6.QtWidgets import QWidget, QApplication, QPushButton, QMessageBox, QLa
 from src.utils.translator import TencentTranslator
 
 class TranslationThread(QThread):
-    finished = pyqtSignal(list)  # 翻译完成信号
-    error = pyqtSignal(str)      # 错误信号
-    
-    def __init__(self, translator, texts, source_lang, target_lang):
-        super().__init__()
+    translated = pyqtSignal(list)
+    error = pyqtSignal(str)
+
+    def __init__(self, translator, texts, source_lang, target_lang, parent=None):
+        super().__init__(parent)
         self.translator = translator
         self.texts = texts
         self.source_lang = source_lang
         self.target_lang = target_lang
-        
+        self.cancelled = Event()
+
     def run(self):
         try:
-            translated_texts = []
-            for text in self.texts:
-                translated = self.translator.translate(
-                    text,
-                    source_lang=self.source_lang,
-                    target_lang=self.target_lang
-                )
-                translated_texts.append(translated)
-            self.finished.emit(translated_texts)
-        except Exception as e:
-            self.error.emit(str(e))
+            texts = self.translator.translate_texts(
+                self.texts, self.source_lang, self.target_lang, cancel_event=self.cancelled
+            )
+            if not self.cancelled.is_set():
+                self.translated.emit(texts)
+        except Exception as error:
+            if not self.cancelled.is_set():
+                self.error.emit(str(error))
+
+    def stop_and_wait(self):
+        # 应用退出前等待当前网络操作收尾，避免销毁仍在运行的 QThread。
+        self.cancelled.set()
+        self.wait()
+
 
 class PreviewWindow(QWidget):
     def __init__(self, parent, image_path, ocr_result):
@@ -124,13 +130,16 @@ class PreviewWindow(QWidget):
                 translator,
                 texts,
                 settings.get('from_lang', 'auto'),
-                settings.get('to_lang', 'zh')
+                settings.get('to_lang', 'zh'),
+                parent=QApplication.instance(),
             )
             
             # 连接信号
-            self.translation_thread.finished.connect(self.on_translation_finished)
+            self.translation_thread.translated.connect(self.on_translation_finished)
             self.translation_thread.error.connect(self.on_translation_error)
+            self.translation_thread.finished.connect(self.on_translation_thread_finished)
             self.translation_thread.finished.connect(self.translation_thread.deleteLater)
+            QApplication.instance().aboutToQuit.connect(self.translation_thread.stop_and_wait)
             
             # 显示加载提示
             self.translate_btn.setEnabled(False)
@@ -140,32 +149,35 @@ class PreviewWindow(QWidget):
             self.translation_thread.start()
             
         except Exception as e:
+            if self.translation_thread is not None:
+                self.translation_thread.deleteLater()
             QMessageBox.warning(self, '错误', f'翻译出错: {str(e)}')
             self.translation_thread = None
             self.translate_btn.setEnabled(True)
             self.loading_label.hide()
             
     def on_translation_finished(self, translated_texts):
+        if self.translation_thread.cancelled.is_set():
+            return
         self.translated_text = translated_texts
         self.is_translated = True
         self.translate_btn.setText('原文')
-        self.translate_btn.setEnabled(True)
-        self.loading_label.hide()
-        self.translation_thread = None
         self.update()
-        
+
     def on_translation_error(self, error_msg):
-        QMessageBox.warning(self, '错误', f'翻译出错: {error_msg}')
+        if not self.translation_thread.cancelled.is_set():
+            QMessageBox.warning(self, '错误', f'翻译出错: {error_msg}')
+
+    def on_translation_thread_finished(self):
         self.translate_btn.setEnabled(True)
         self.loading_label.hide()
         self.translation_thread = None
-        
+
     def closeEvent(self, event):
-        if self.translation_thread and self.translation_thread.isRunning():
-            self.translation_thread.terminate()
-            self.translation_thread.wait()
+        if self.translation_thread is not None:
+            self.translation_thread.cancelled.set()
         event.accept()
-        
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)  # 启用抗锯齿
